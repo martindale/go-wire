@@ -1,3 +1,5 @@
+THIS BRANCH IS OUT OF DATE, SEE THE DEVELOP BRANCH.
+
 # Wire encoding for Golang
 
 This software implements Go bindings for the Wire encoding protocol.
