@@ -41,21 +41,15 @@ reasons to adopt Wire.
   types.  C union, the possible values for a union type each get their own name.
   This is primitive and type-unsafe system, and has been replaced or
   supplemented with a variety of language features since.
-* In C++, classes.  Unions are still useful (e.g. for performance) but not as
-  widely used as classes.
-* In Java, Java-interfaces and classes.
-* In Golang, the replacement is Golang-interfaces and all (even primitive)
-  types.
-* Javascript naturally lends itself well to `oneof` support, as it only has a few
-  native types including the ubiquitous Object type.
-  This isn't possible today with Protobuf3 because it's not sufficiently
-  object-oriented in its message-embedding/oneof/repeated design.  You need to
-  create your Protobuf schema file which generates code, but the generated code
-  is often not the logical objects that you really want to use in your
-  application. This means that if your application is sufficiently complex,
-  using Protobuf probably adds more complexity to your application than is
-  necessary with a different protocol.  While Protobuf is useful, it can be
-  improved.
+  * In C++, classes.  Unions are still useful (e.g. for performance) but not as
+    widely used as classes.
+  * In Java, Java-interfaces and classes.
+  * In Golang, the replacement is Golang-interfaces and all (even primitive)
+    types.
+  * Javascript naturally lends itself well to `oneof` support, as it only has a few
+    native types including the ubiquitous Object type.
+
+Protobuf would be better if it were object-oriented. Since it isn't, the generated code is often not the logical objects that you really want to use in your application, so you end up duplicating the structure in the Protobuf schema file and writing translators to and from your logic objects. Wire can eliminate this extra duplication.
 
 ### Interfaces and concrete types
 Wire is an encoding library that can handle interfaces (like Protobuf `oneof`)
