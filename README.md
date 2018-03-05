@@ -1,5 +1,4 @@
 # Wire encoding for Golang
-
 This software implements Go bindings for the Wire encoding protocol.
 
 Wire is an object encoding specification.  It's like Protobuf3+RLP with native
@@ -7,85 +6,68 @@ JSON support for that extra developer friendliness.  The goal of Wire is to
 bring parity between the most popular modern language's natural object-oriented
 featureset and a common binary encoding protocol.
 
-(CAVEAT: we're still building out the ecosystem, which is currently most
-developed in Golang.  But Wire is not just for Golang.  If you'd like to
-contribute by creating supporting libraries in various languages from scratch
-or by adapting existing Protobuf3 libraries, please contact us via the Github
-issue system!)
-
+**CAVEAT:** we're still building out the ecosystem, which is currently most
+developed in Golang.  But Wire is not just for Golang — if you'd like to
+contribute by creating supporting libraries in various languages from scratch,
+or by adapting existing Protobuf3 libraries, please [open an issue on GitHub](https://github.com/tendermint/go-wire/issues)!
 
 ## Why Wire?
-
 ### Wire vs JSON
-
-JSON is good but inefficient.  There should be a more compact binary encoding
-standard for messages.  Wire provides a binary encoding for complex objects,
-but also a fully compatible JSON encoding as well so you can switch over to
-binary for the compactness.
-
+JavaScript Object Notation (JSON) is good, but inefficient.  There should be a
+more compact binary encoding standard for messages.  Wire provides a binary
+encoding for complex objects, but also a fully compatible JSON encoding as well
+so you can switch over to binary for the compactness.
 
 ### Wire vs Protobuf3
-
-Protobuf3 is almost perfect.  Upgradeability and compact binary representation,
-with JSON support via pbjson.
-
 Wire is best thought of as a contender for Protobuf4.  It extends the 3-bit
 type system and introduces a few more types that objectively make it a better
 binary encoding protocol for many use-cases.  The bulk of this spec will
 explain how Wire differs from Protobuf3, so here we will just illustrate a few
 reasons to adopt Wire.
 
-* In Protobuf3, the fields of a structure are varint byte-length prefixed.
+* In Protobuf3, [the fields of a structure are `varint` byte-length prefixed]((https://github.com/tendermint/go-wire/wiki/wirescan)).
   This makes the binary encoding naturally more inefficient, as bytes cannot
-simply be written to a memory array (buffer) in sequence without allocating a
-new buffer for each embedded message.  Wire is encoded in such a way that the
-complete structure of the message (not just the top-level) can be determined by
-scanning the byte encoding without any type information other than what is
-available in the binary bytes.  This makes encoding faster with no penalty when
-decoding. See how Protobuf3 encodes embedded message fields
-[here](https://github.com/tendermint/go-wire/wiki/wirescan)
-
+  simply be written to a memory array (buffer) in sequence without allocating a
+  new buffer for each embedded message.  Wire is encoded in such a way that the
+  complete structure of the message (not just the top-level) can be determined
+  by scanning the byte encoding without any type information other than what is
+  available in the binary bytes.  This makes encoding faster with no penalty
+  when decoding.
 * Protobuf3 has `oneof`, but it's clunky.  For example, Golang Protobuf's
-  implementation is not so good ([source](https://github.com/gogo/protobuf/issues/168)).
-But this isn't just an implementation issue. The real problem is that oneof
-doesn't match how modern languages already work to provide oneof-like features.
-Protobuf3's oneof support feels more like an encoding for C union types.  C
-union, the possible values for a union type each get their own name.  This is
-primitive and type-unsafe system, and it's been replaced or supplemented with a
-variety of language features since.
-
-	* In C++, classes.  Unions are still useful (e.g. for performance) but not as
-	  widely used as classes.
-	* In Java, Java-interfaces and classes.
-	* In Golang, the replacement is Golang-interfaces and all (even primitive)
-	  types.
-	* Javascript naturally lends itself well to oneof support, as it only has a few
-	  native types including the ubiquitous Object type.
-
-This isn't possible today with Protobuf3 because it's not sufficiently
-object-oriented in its message-embedding/oneof/repeated design.  You need to
-create your Protobuf schema file which generates code, but the generated code
-is often not the logical objects that you really want to use in your
-application.  This means that if your application is sufficiently complex,
-using Protobuf probably adds more complexity to your application than is
-necessary with a different protocol.  While Protobuf is useful, it can be
-improved.
-
+  implementation is [excessively verbose](https://github.com/gogo/protobuf/issues/168).
+  But this isn't just an implementation issue. The real problem is that `oneof`
+  doesn't match how modern languages already work to provide `oneof`-like
+  features. Protobuf3's `oneof` support feels more like an encoding for C union
+  types.  C union, the possible values for a union type each get their own name.
+  This is primitive and type-unsafe system, and has been replaced or
+  supplemented with a variety of language features since.
+* In C++, classes.  Unions are still useful (e.g. for performance) but not as
+  widely used as classes.
+* In Java, Java-interfaces and classes.
+* In Golang, the replacement is Golang-interfaces and all (even primitive)
+  types.
+* Javascript naturally lends itself well to `oneof` support, as it only has a few
+  native types including the ubiquitous Object type.
+  This isn't possible today with Protobuf3 because it's not sufficiently
+  object-oriented in its message-embedding/oneof/repeated design.  You need to
+  create your Protobuf schema file which generates code, but the generated code
+  is often not the logical objects that you really want to use in your
+  application. This means that if your application is sufficiently complex,
+  using Protobuf probably adds more complexity to your application than is
+  necessary with a different protocol.  While Protobuf is useful, it can be
+  improved.
 
 ### Interfaces and concrete types
-
-Wire is an encoding library that can handle interfaces (like Protobuf "oneof")
+Wire is an encoding library that can handle interfaces (like Protobuf `oneof`)
 exceptionally well.  This is achieved by prefixing bytes before each "concrete
 type".
 
 A concrete type is some non-interface value (generally a struct) which
 implements the interface to be (de)serialized. Not all structures need to be
-registered as concrete types -- only when they will be stored in interface type
+registered as concrete types — only when they will be stored in interface type
 fields (or interface type slices) do they need to be registered.
 
-
 ### Registering types
-
 All interfaces and the concrete types that implement them must be registered.
 
 ```golang
@@ -105,13 +87,12 @@ interface field, they will always be deserialized as pointers.
 
 
 ### Prefix bytes to identify the concrete type
-
 All registered concrete types are encoded with leading 4 bytes (called "prefix
 bytes"), even when it's not held in an interface field/element.  In this way,
 Wire ensures that concrete types (almost) always have the same canonical
-representation.  The first byte of the prefix bytes must not be a zero byte, 
-and the last 3 bits are reserved for the typ3 bits (explained elsewhere), so
-there are 2^(8x4-3)-2^(8x3-3) = 534,773,760 possible values.
+representation.  The first byte of the prefix bytes must not be a zero byte, and
+the last 3 bits are reserved for the [`typ3` bits](#the-typ3-byte), so there
+are `2^(8x4-3)-2^(8x3-3) = 534,773,760` possible values.
 
 When there are 1024 concrete types registered that implement the same interface,
 the probability of there being a conflict is ~ 0.1%.
@@ -126,12 +107,12 @@ dependencies that do so.
 The Birthday Paradox: 1024 random registered types, Wire prefix bytes
 https://instacalc.com/51339
 
-possible = 534773760                                = 534,773,760 
-registered = 1024                                   = 1,024 
-pairs = ((registered)*(registered-1)) / 2           = 523,776 
-no_collisions = ((possible-1) / possible)^pairs     = 0.99902104475 
-any_collisions = 1 - no_collisions                  = 0.00097895525 
-percent_any_collisions = any_collisions * 100       = 0.09789552533 
+possible = 534773760                                = 534,773,760
+registered = 1024                                   = 1,024
+pairs = ((registered)*(registered-1)) / 2           = 523,776
+no_collisions = ((possible-1) / possible)^pairs     = 0.99902104475
+any_collisions = 1 - no_collisions                  = 0.00097895525
+percent_any_collisions = any_collisions * 100       = 0.09789552533
 ```
 
 Since 4 bytes are not sufficient to ensure no conflicts, sometimes it is
@@ -157,9 +138,7 @@ escaped with 0x00.
 The 4 prefix bytes always immediately precede the binary encoding of the
 concrete type.
 
-
 ### Computing the prefix and disambiguation bytes
-
 To compute the disambiguation bytes, we take `hash := sha256(concreteTypeName)`,
 and drop the leading 0x00 bytes.
 
@@ -194,40 +173,43 @@ the final prefix byte would be `0xDB`.
 ```
 
 ### Supported types
+#### Primary Types
+`uvarint`, `varint`, `byte`, `uint[8,16,32,64]`, `int[8,16,32,64]`, `string`,
+and `time`.
 
-**Primary types**: `uvarint`, `varint`, `byte`, `uint[8,16,32,64]`,
-`int[8,16,32,64]`, `string`, and `time` types are supported
+#### Arrays
+Arrays can hold items of any arbitrary type.  For example, byte-arrays and
+byte-array-arrays are supported.
 
-**Arrays**: Arrays can hold items of any arbitrary type.  For example,
-byte-arrays and byte-array-arrays are supported.
+#### Structs
+Struct fields are encoded by value (without the key name) in the order that they
+are declared in the struct.  In this way it is similar to Apache Avro.
 
-**Structs**: Struct fields are encoded by value (without the key name) in the
-order that they are declared in the struct.  In this way it is similar to
-Apache Avro.
-
-**Interfaces**: Interfaces are like union types where the value can be any
+#### Interfaces
+Interfaces are like union types where the value can be any
 non-interface type. The actual value is preceded by a single "type byte" that
 shows which concrete is encoded.
 
-**Pointers**: Pointers are like optional fields.  The first byte is 0x00 to
+#### Pointers
+Pointers are like optional fields.  The first byte is 0x00 to
 denote a null pointer (i.e. no value), otherwise it is 0x01.
 
 ### Unsupported types
-
-**Maps**: Maps are not supported because for most languages, key orders are
+#### Maps
+Maps are not supported because for most languages, key orders are
 nondeterministic.  If you need to encode/decode maps of arbitrary key-value
 pairs, encode an array of {key,value} structs instead.
 
-**Floating points**: Floating point number types are discouraged because [of
-reasons](http://gafferongames.com/networking-for-game-programmers/floating-point-determinism/).
+#### Floating points
+Floating point number types are discouraged as [they are generally
+non-deterministic](http://gafferongames.com/networking-for-game-programmers/floating-point-determinism/).
 If you need to use them, use the field tag `wire:"unsafe"`.
 
-**Enums**: Enum types are not supported in all languages, and they're simple
-enough to model as integers anyways.
-
+#### Enums
+Enum types are not supported in all languages, and they're simple enough to
+model as integers anyways.
 
 ### Wire vs Protobuf3 in detail
-
 From the [Protocol Buffers encoding
 guide](https://developers.google.com/protocol-buffers/docs/encoding):
 
@@ -245,7 +227,7 @@ guide](https://developers.google.com/protocol-buffers/docs/encoding):
 > enough information to find the length of the following value.
 >
 > The available wire types are as follows:
-> 
+>
 > Type | Meaning | Used For
 > ---- | ------- | --------
 > 0    | Varint  | int32, int64, uint32, uint64, sint32, sint64, bool, enum
@@ -259,11 +241,12 @@ guide](https://developers.google.com/protocol-buffers/docs/encoding):
 > 3) | wire_type – in other words, the last three bits of the number store the
 > wire type.
 
+#### The Typ3 Byte
 In Wire, the "type" is similarly enocded by 3 bits, called the "typ3". When it
 appears alone in a byte, it is called a "typ3 byte".
 
-In Wire, "varint" is the Protobuf equivalent of "signed varint" aka "sint32",
-and "uvarint" is the equivalent of "varint" aka "int32".
+In Wire, `varint` is the Protobuf equivalent of "signed varint" aka `sint32`,
+and `uvarint` is the equivalent of "varint" aka `int32`.
 
 Typ3 | Meaning          | Used For
 ---- | ---------------- | --------
@@ -276,14 +259,12 @@ Typ3 | Meaning          | Used For
 6    | List             | array, slice; followed by element `<typ4-byte>`, then `<uvarint(num-items)>`
 7    | Interface        | registered concrete types; followed by `<prefix-bytes>` or `<disfix-bytes>`, then `<typ3-byte>`.
 
-
-#### Structs 
-
+#### Structs
 Struct fields are encoded in order, and a null/empty/zero field is represented
-by the absence of a field in the encoding, similar to Protobuf. Unlike
-Protobuf, in Wire, the total byte-size of a Wire encoded struct cannot in
-general be determined in a stream until each field's size has been determined
-by scanning all fields and elements recursively.
+by the absence of a field in the encoding, similar to Protobuf. Unlike Protobuf,
+in Wire, the total byte-size of a Wire encoded struct cannot in general be
+determined in a stream until each field's size has been determined by scanning
+all fields and elements recursively.
 
 As in Protobuf, each struct field is keyed by a uvarint with the value
 `(field_number << 3) | type`, where `type` is 3 bits long.
@@ -308,7 +289,6 @@ byteslices and bytearrays.)
 
 
 #### Lists
-
 Unlike Protobuf, Wire deprecates "repeated fields" in favor of "lists". A list
 is encoded by first writing the typ4 byte of the element type, followed by the
 uvarint encoding of the length of the list, followed by the encoding of each
@@ -413,7 +393,7 @@ number nor typ3 byte.
 To declare that the List may contain nil elements (e.g. the list "nillable"),
 the Lists's element typ4 byte should set the 4th least-significant bit (the
 "pointer bit") to 1.  If (and only if) the pointer bit is 1, each element is
-prefixed by a "nil byte" -- a 0x00 byte to declare that a non-nil item follows,
+prefixed by a "nil byte" — a 0x00 byte to declare that a non-nil item follows,
 or a 0x01 byte to declare that the next item is nil.  Note that the byte values
 are flipped (typically 0 is used to denote nil).  This is to open the
 possibility of supporting sparse encoding of nil lists in the future by
@@ -469,21 +449,16 @@ representative of the amount of memory it takes to decode it. A 200-byte
 go-wire binary blob shouldn't decode into a 1GB object in memory, but it might
 with sparse encoding, so we should be aware of that.
 
-
 #### Interfaces
+Finally, Protobuf's `oneof` gets a facelift: in place of `oneof`, Wire has `interface`.
 
-Finally, Protobuf's "oneof" gets a facelift.  Instead of "oneof", Wire has
-Interfaces.
-
-An interface value is typically a struct, but it doesn't need to be.  The last
+An interface value is typically a `struct`, but it doesn't need to be.  The last
 3 bits of the written prefix bytes are the concrete type's typ3 bits, so a
 scanner can recursively traverse the fields and elements of the value.  A nil
 interface value is encoded by 2 zero bytes (0x0000) in place of the 4 prefix
 bytes.  As in Protobuf, a nil struct field value is not encoded at all.
 
-
 ### Wire in other langauges
-
-Contact us on github.com/tendermint/go-wire/issues, we will pay out bounties
-for implementations in other languages.  In Golang, we are are interested in
-codec generators.
+[Open an Issue on GitHub](https://github.com/tendermint/go-wire/issues), as we
+will pay out bounties for implementations in other languages.  In Golang, we are
+are primarily interested in codec generators.
