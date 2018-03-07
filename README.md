@@ -25,7 +25,7 @@ binary encoding protocol for many use-cases.  The bulk of this spec will
 explain how Wire differs from Protobuf3, so here we will just illustrate a few
 reasons to adopt Wire.
 
-* In Protobuf3, [the fields of a structure are `varint` byte-length prefixed]((https://github.com/tendermint/go-wire/wiki/wirescan)).
+* In Protobuf3, [embedded message are `varint` byte-length prefixed]((https://github.com/tendermint/go-wire/wiki/wirescan)).
   This makes the binary encoding naturally more inefficient, as bytes cannot
   simply be written to a memory array (buffer) in sequence without allocating a
   new buffer for each embedded message.  Wire is encoded in such a way that the
