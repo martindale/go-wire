@@ -1,57 +1,64 @@
-# Wire encoding for Golang
+# Wire encoding for Go
+
 This software implements Go bindings for the Wire encoding protocol.
 
-Wire is an object encoding specification.  It's like Protobuf3+RLP with native
-JSON support for that extra developer friendliness.  The goal of Wire is to
-bring parity between the most popular modern language's natural object-oriented
-featureset and a common binary encoding protocol.
+Wire is an object encoding specification. Think of it as an object-oriented
+Protobuf3 with native JSON support.
+
+The goal of the Wire encoding protocol is to bring parity between application
+logic objects and persistence objects.
 
 **CAVEAT:** we're still building out the ecosystem, which is currently most
-developed in Golang.  But Wire is not just for Golang — if you'd like to
+developed in Go.  But Wire is not just for Go — if you'd like to
 contribute by creating supporting libraries in various languages from scratch,
 or by adapting existing Protobuf3 libraries, please [open an issue on GitHub](https://github.com/tendermint/go-wire/issues)!
 
-## Why Wire?
-### Wire vs JSON
-JavaScript Object Notation (JSON) is good, but inefficient.  There should be a
-more compact binary encoding standard for messages.  Wire provides a binary
-encoding for complex objects, but also a fully compatible JSON encoding as well
-so you can switch over to binary for the compactness.
+# Why Wire?
 
-### Wire vs Protobuf3
-Wire is best thought of as a contender for Protobuf4.  It extends the 3-bit
-type system and introduces a few more types that objectively make it a better
-binary encoding protocol for many use-cases.  The bulk of this spec will
-explain how Wire differs from Protobuf3, so here we will just illustrate a few
-reasons to adopt Wire.
+## Wire vs JSON
 
-* In Protobuf3, [embedded message are `varint` byte-length prefixed]((https://github.com/tendermint/go-wire/wiki/wirescan)).
-  This makes the binary encoding naturally more inefficient, as bytes cannot
+JavaScript Object Notation (JSON) is human readable, well structured and great for interoperability with Javascript, but it is inefficient.
+Protobuf3, BER, RLP all exist because we need a more compact and efficient binary encoding standard.
+Wire provides efficient binary encoding for complex objects (e.g. embedded objects) that integrate naturally
+with your favorite modern programming language. Additionally, Wire is fully compatible with JSON encoding.
+
+## Wire vs Protobuf3
+
+Wire wants to be Protobuf4. The bulk of this spec will
+explain how Wire differs from Protobuf3. Here, we will illustrate two key
+selling points for Wire.
+
+* In Protobuf3, [embedded message are `varint` byte-length prefixed]((https://github.com/tendermint/go-wire/wiki/wirescan));
+  However, this makes the binary encoding naturally more inefficient, as bytes cannot
   simply be written to a memory array (buffer) in sequence without allocating a
-  new buffer for each embedded message.  Wire is encoded in such a way that the
-  complete structure of the message (not just the top-level) can be determined
-  by scanning the byte encoding without any type information other than what is
-  available in the binary bytes.  This makes encoding faster with no penalty
-  when decoding.
-* Protobuf3 has `oneof`, but it's clunky.  For example, Golang Protobuf's
+  new buffer for each embedded message. Wire is encoded in such a way that the
+  complete structure of the message (not just the top-level structure) can be determined by
+  scanning the byte encoding without any type information other than what is
+  available in the binary bytes. This makes encoding faster with no penalty when
+  decoding.
+
+* Protobuf3 has `oneof`, but it's clunky.  For example, Go Protobuf's
   implementation is [excessively verbose](https://github.com/gogo/protobuf/issues/168).
   But this isn't just an implementation issue. The real problem is that `oneof`
   doesn't match how modern languages already work to provide `oneof`-like
-  features. Protobuf3's `oneof` support feels more like an encoding for C union
-  types.  C union, the possible values for a union type each get their own name.
-  This is primitive and type-unsafe system, and has been replaced or
-  supplemented with a variety of language features since.
-  * In C++, classes.  Unions are still useful (e.g. for performance) but not as
-    widely used as classes.
+  features. Protobuf3's `oneof` support feels more like a (bad) encoding for C union
+  types.  For example, you can't declare a union type and re-use it in Protobuf.
+  
+  What we want is a way to encode *objects*, and a new type to represent a set of object
+  types (often called interfaces).
+  
+  * In C++, classes.  Unions are still useful (e.g. for performance) but not as widely used as classes.
   * In Java, Java-interfaces and classes.
-  * In Golang, the replacement is Golang-interfaces and all (even primitive)
-    types.
-  * Javascript naturally lends itself well to `oneof` support, as it only has a few
-    native types including the ubiquitous Object type.
+  * In Go, the replacement is Golang-interfaces and all (even primitive) types.
+  * Javascript naturally lends itself well to `oneof` support, as it only has a few native types including the ubiquitous Object type.
 
-Protobuf would be better if it were object-oriented. Since it isn't, the generated code is often not the logical objects that you really want to use in your application, so you end up duplicating the structure in the Protobuf schema file and writing translators to and from your logic objects. Wire can eliminate this extra duplication.
+Protobuf would be better if it were object-oriented. Since it isn't, the generated code
+is often not the logical objects that you really want to use in your
+application, so you end up duplicating the structure in the Protobuf schema file and
+writing translators to and from your logic objects.  Wire can eliminate this extra duplication.
 
 ### Interfaces and concrete types
+
 Wire is an encoding library that can handle interfaces (like Protobuf `oneof`)
 exceptionally well.  This is achieved by prefixing bytes before each "concrete
 type".
@@ -62,9 +69,11 @@ registered as concrete types — only when they will be stored in interface type
 fields (or interface type slices) do they need to be registered.
 
 ### Registering types
-All interfaces and the concrete types that implement them must be registered.
 
-```golang
+To encode and decode an interface, it has to be registered with `codec.RegisterInterface`
+and its respective concrete type implementers should be registered with `codec.RegisterConcrete`
+
+```go
 wire.RegisterInterface((*MyInterface1)(nil), nil)
 wire.RegisterInterface((*MyInterface2)(nil), nil)
 wire.RegisterConcrete(MyStruct1{}, "com.tendermint/MyStruct1", nil)
@@ -74,11 +83,11 @@ wire.RegisterConcrete(&MyStruct3{}, "anythingcangoinhereifitsunique", nil)
 
 Notice that an interface is represented by a nil pointer of that interface.
 
-Structures that must be deserialized as pointer values must be registered with
-a pointer value as well.  It's OK to (de)serialize such structures in
-non-pointer (value) form, but when deserializing such structures into an
-interface field, they will always be deserialized as pointers.
-
+Wire tries to transparently deal with pointers (and pointer-pointers) when it can.
+When it comes to decoding a concrete type into an interface value, Go gives
+the user the option to register the concrete type as a pointer or non-pointer.
+If and only if the value is registered as a pointer the decoded value will be a pointer as well.
+...
 
 ### Prefix bytes to identify the concrete type
 All registered concrete types are encoded with leading 4 bytes (called "prefix
@@ -144,7 +153,7 @@ and drop the leading 0x00 bytes.
 In the example above, hash has two leading 0x00 bytes, so we drop them.
 
 ```
-> rest = dropLeadingZeroBytes(hash) // 0x{A8 FC 54 00 00 BB 9C 83 DD ...}
+> rest = dropLeadingZeroBytes(hash) // 0x{A8 FC 54 00 00 00 BB 9C 83 DD ...}
 > disamb = rest[0:3]
 > rest = dropLeadingZeroBytes(rest[3:])
 > prefix = rest[0:4]
@@ -167,9 +176,9 @@ the final prefix byte would be `0xDB`.
 ```
 
 ### Supported types
+
 #### Primary Types
-`uvarint`, `varint`, `byte`, `uint[8,16,32,64]`, `int[8,16,32,64]`, `string`,
-and `time`.
+`uvarint`, `varint`, `byte`, `uint[8,16,32,64]`, `int[8,16,32,64]`, `string`, and `time`.
 
 #### Arrays
 Arrays can hold items of any arbitrary type.  For example, byte-arrays and
@@ -188,22 +197,25 @@ shows which concrete is encoded.
 Pointers are like optional fields.  The first byte is 0x00 to
 denote a null pointer (i.e. no value), otherwise it is 0x01.
 
-### Unsupported types
+### Supported (but discouraged) types
+
 #### Maps
-Maps are not supported because for most languages, key orders are
-nondeterministic.  If you need to encode/decode maps of arbitrary key-value
-pairs, encode an array of {key,value} structs instead.
+In most languages, iteration order is nondeterministic, so in those
+cases Wire (should) provide a standard Map library for compatibility.
 
 #### Floating points
 Floating point number types are discouraged as [they are generally
 non-deterministic](http://gafferongames.com/networking-for-game-programmers/floating-point-determinism/).
 If you need to use them, use the field tag `wire:"unsafe"`.
 
+### Unsupported types
+
 #### Enums
 Enum types are not supported in all languages, and they're simple enough to
 model as integers anyways.
 
 ### Wire vs Protobuf3 in detail
+
 From the [Protocol Buffers encoding
 guide](https://developers.google.com/protocol-buffers/docs/encoding):
 
@@ -236,6 +248,7 @@ guide](https://developers.google.com/protocol-buffers/docs/encoding):
 > wire type.
 
 #### The Typ3 Byte
+
 In Wire, the "type" is similarly enocded by 3 bits, called the "typ3". When it
 appears alone in a byte, it is called a "typ3 byte".
 
@@ -254,6 +267,7 @@ Typ3 | Meaning          | Used For
 7    | Interface        | registered concrete types; followed by `<prefix-bytes>` or `<disfix-bytes>`, then `<typ3-byte>`.
 
 #### Structs
+
 Struct fields are encoded in order, and a null/empty/zero field is represented
 by the absence of a field in the encoding, similar to Protobuf. Unlike Protobuf,
 in Wire, the total byte-size of a Wire encoded struct cannot in general be
@@ -267,7 +281,7 @@ When the typ3 bits are represented as a single byte (using the least
 significant bits of the byte), we call it the "typ3 byte".  For example, the
 typ3 byte for a "list" is `0x06`.
 
-In Wire, when encoding elements of a "list" (Golang slice or array), the typ3
+In Wire, when encoding elements of a "list" (Go slice or array), the typ3
 byte isn't enough.  Specifically, when the element type of the list is a
 pointer type, the element value may be nil.  We encode the element type of this
 kind of list with a typ4 byte, which is like a typ3 byte, but uses the 4th
@@ -281,8 +295,8 @@ Inner structs that are embedded in outer structs are encoded by the field typ3
 "Byte-Length (prefixed)".  In Wire, the "Byte-Length" typ3 is only used for
 byteslices and bytearrays.)
 
-
 #### Lists
+
 Unlike Protobuf, Wire deprecates "repeated fields" in favor of "lists". A list
 is encoded by first writing the typ4 byte of the element type, followed by the
 uvarint encoding of the length of the list, followed by the encoding of each
@@ -294,7 +308,7 @@ Each struct element is encoded starting with the first field key, and is
 terminated with the `StructTerm` typ3 byte (`0x04`, which could be interpreted
 as a special struct key with field number 0).
 
-```golang
+```go
 type Item struct {
 	Number int
 }
@@ -336,7 +350,7 @@ uvarint encoding of `m` (the size of the first child list item).  Each struct
 element is encoded starting with the first field key, as in the previous
 example.
 
-```golang
+```go
 type Item struct {
 	Number int
 }
@@ -398,7 +412,7 @@ Nil slices, interfaces, and pointers are all encoded as nil in a nillable list.
 NOTE: A nil interface in a nillable list is encoded with a single byte 0x01,
 while a nil interface in a non-nillable list is encoded with two bytes 0x0000.
 
-```golang
+```go
 type Item struct {
 	Number int
 }
@@ -438,13 +452,12 @@ number is implied.
 In the future, for sparse lists we could support encoding of more than one nil
 items at a time, which could be even more compact.
 
-NOTE: The current spec makes the byte-length of the input be more-or-less
-representative of the amount of memory it takes to decode it. A 200-byte
+NOTE: The current spec makes the byte-length of the input more-or-less
+representative of the amount of memory it takes to decode the input. A 200-byte
 go-wire binary blob shouldn't decode into a 1GB object in memory, but it might
 with sparse encoding, so we should be aware of that.
 
 #### Interfaces
-Finally, Protobuf's `oneof` gets a facelift: in place of `oneof`, Wire has `interface`.
 
 An interface value is typically a `struct`, but it doesn't need to be.  The last
 3 bits of the written prefix bytes are the concrete type's typ3 bits, so a
@@ -452,7 +465,8 @@ scanner can recursively traverse the fields and elements of the value.  A nil
 interface value is encoded by 2 zero bytes (0x0000) in place of the 4 prefix
 bytes.  As in Protobuf, a nil struct field value is not encoded at all.
 
-### Wire in other langauges
+# Wire in other langauges
+
 [Open an Issue on GitHub](https://github.com/tendermint/go-wire/issues), as we
 will pay out bounties for implementations in other languages.  In Golang, we are
 are primarily interested in codec generators.
